@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "jackpot-spin",
+    "slug": "jackpot-spin",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.jackpotspin.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "dev.jackpotspin.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-audio",
+      "expo-font",
+      "react-native-webgpu"
+    ],
+    "backgroundColor": "#080D1D",
+    "splash": {
+      "backgroundColor": "#080D1D"
+    }
+  }
+}
