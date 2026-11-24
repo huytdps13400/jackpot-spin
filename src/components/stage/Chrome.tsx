@@ -3,7 +3,6 @@ import {
   FilterMode,
   MipmapMode,
   PaintStyle,
-  Picture,
   Skia,
   TileMode,
   createPicture,
@@ -16,6 +15,7 @@ import { memo, useMemo } from 'react';
 import { nine } from '../../theme/art';
 import type { Rect, StageLayout } from '../../theme/layout';
 import { lux, space } from '../../theme/tokens';
+import { BakedPicture } from './Baked';
 import { TEXT_STYLE, capHeight, drawGameText, type TextFx } from './gameText';
 
 /**
@@ -124,7 +124,8 @@ export const BoardChrome = memo(function BoardChrome({ layout, images }: BoardPr
       drawNine(canvas, images.frame, nine.frame, frame, frameT + 4);
     }, Skia.XYWHRect(0, 0, width, height));
   }, [layout, images]);
-  return <Picture picture={picture} />;
+  // static: baked to a texture once instead of replaying the paths every frame
+  return <BakedPicture picture={picture} bounds={{ x: 0, y: 0, width: layout.width, height: layout.height }} />;
 });
 
 type PanelProps = { layout: StageLayout; images: ChromeImages; labelFont: SkFont; smallFont: SkFont; digitFont: SkFont };
@@ -228,5 +229,6 @@ export const PanelChrome = memo(function PanelChrome({ layout, images, labelFont
       canvas.drawCircle(spin.cx, spin.cy + 3, spin.r + 9, socket);
     }, Skia.XYWHRect(0, 0, width, height));
   }, [layout, images, labelFont, smallFont, digitFont]);
-  return <Picture picture={picture} />;
+  // static: baked to a texture once instead of replaying the paths every frame
+  return <BakedPicture picture={picture} bounds={{ x: 0, y: 0, width: layout.width, height: layout.height }} />;
 });

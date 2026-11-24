@@ -218,41 +218,16 @@ half4 main(float2 p) {
   // where the lights meet: a soft elliptical pool on the stage (wider than tall, like a spot on a floor)
   float2 d = (p - focus.xy) * float2(1.0, 1.35);
   light += hit.rgb * focus.z * 0.5 * exp(-dot(d, d) / (res.x * res.x * 0.02));
-  return half4(half3(light), 1.0);
-}
-`;
-
-/**
- * House lights down, over the stage: black, with a soft spotlight hole on the treasure. The HUD
- * below the board dims less, so the banner can still name the find.
- */
-const DIM_SKSL = `
-uniform float2 res;
-uniform float time;
-uniform float drive;
-uniform float energy;
-uniform float calm;
-uniform float3 focus;
-uniform float4 hit;
-uniform float2 wave;
-uniform float dark;
-uniform float2 spot;
-uniform float3 base0;
-uniform float3 base1;
-uniform float3 lightA;
-uniform float3 lightB;
-
-half4 main(float2 p) {
-  float2 d = (p - focus.xy) * float2(1.0, 1.1);
-  float hole = smoothstep(spot.x * 0.4, spot.x * 1.0, length(d));
+  // house lights down, in the same pass: black with a soft spotlight hole on the treasure (the
+  // HUD below the board dims less, so the banner can still name the find). Drawn src-over, so
+  // the result is dst * (1 - a) + light: the room dims, then the moving heads add their light.
+  float2 dd = (p - focus.xy) * float2(1.0, 1.1);
+  float hole = smoothstep(spot.x * 0.4, spot.x * 1.0, length(dd));
   float hud = mix(1.0, 0.88, smoothstep(spot.y - 10.0, spot.y + 40.0, p.y));
   float a = dark * hole * hud;
-  return half4(0.0, 0.0, 0.0, a);
+  return half4(half3(light), a);
 }
 `;
-
-const dimEffect = Skia.RuntimeEffect.Make(DIM_SKSL);
-if (!dimEffect) throw new Error('Stage dim shader failed to compile');
 
 const stageEffect = Skia.RuntimeEffect.Make(STAGE_SKSL);
 if (!stageEffect) throw new Error('Stage light shader failed to compile');
@@ -351,13 +326,8 @@ export const Backdrop = memo(function Backdrop(props: Props) {
 export const StageLights = memo(function StageLights(props: Props) {
   const uniforms = useLightRig(props);
   return (
-    <>
-      <Fill>
-        <Shader source={dimEffect} uniforms={uniforms} />
-      </Fill>
-      <Fill blendMode="screen">
-        <Shader source={stageEffect} uniforms={uniforms} />
-      </Fill>
-    </>
+    <Fill>
+      <Shader source={stageEffect} uniforms={uniforms} />
+    </Fill>
   );
 });

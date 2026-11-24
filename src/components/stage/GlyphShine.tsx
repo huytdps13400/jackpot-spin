@@ -1,4 +1,4 @@
-import { Group, LinearGradient, Paint, Rect, vec } from '@shopify/react-native-skia';
+import { Group, LinearGradient, Paint, Rect, rect, vec } from '@shopify/react-native-skia';
 import type { ReactNode } from 'react';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 
@@ -82,19 +82,25 @@ type Props = {
  */
 export function GlyphShine({ sv, piece, box, children }: Props) {
   const w = box.height * 1.4;
+
   const band = useDerivedValue(() => {
     // read the clock here so this re-runs every frame (helpers' reads do not subscribe)
     void sv.clock.value;
     return shineAt(sv, piece);
   });
   const opacity = useDerivedValue(() => band.value.a);
+  // the clip bounds the layer to the lettering's box (a layer is as big as its clip); with no
+  // pass running it is empty, so the idle frames skip the offscreen layer entirely
+  const clip = useDerivedValue(() =>
+    band.value.a > 0.001 ? rect(box.x - 8, box.y - 8, box.width + 16, box.height + 16) : rect(0, 0, 0, 0),
+  );
   const transform = useDerivedValue(() => {
     const u = band.value.u;
     const x = u === u ? box.x + box.width * u - w / 2 : -9999;
     return [{ translateX: x }, { translateY: box.y + box.height / 2 }, { skewX: -0.4 }];
   });
   return (
-    <Group layer={<Paint blendMode="plus" opacity={opacity as SharedValue<number>} />}>
+    <Group clip={clip} layer={<Paint blendMode="plus" opacity={opacity as SharedValue<number>} />}>
       {children}
       <Group transform={transform}>
         <Rect x={0} y={-box.height} width={w} height={box.height * 2} blendMode="srcIn">

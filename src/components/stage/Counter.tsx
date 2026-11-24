@@ -1,10 +1,11 @@
-import { Circle, Group, Picture, RadialGradient, createPicture, rect, Skia, vec, type SkFont } from '@shopify/react-native-skia';
+import { Circle, Group, Image, RadialGradient, createPicture, rect, Skia, vec, type SkFont } from '@shopify/react-native-skia';
 import { memo, useMemo } from 'react';
 import { useDerivedValue } from 'react-native-reanimated';
 
 import type { SpinEngine } from '../../engine/useSpinEngine';
 import type { StageLayout } from '../../theme/layout';
 import { counterGeometry, drawGoldText } from './Chrome';
+import { useBakedPicture } from './Baked';
 import { GlyphShine } from './GlyphShine';
 
 type Props = { layout: StageLayout; sv: SpinEngine['sv']; font: SkFont; smallFont: SkFont };
@@ -36,6 +37,12 @@ export const Counter = memo(function Counter({ layout, sv, font, smallFont }: Pr
         }
       }, Skia.XYWHRect(-10, -lineH, colW + 20, lineH * 12)),
     [font, colW, lineH],
+  );
+  // the gold digits are outlined paths: bake the strip once, then each wheel is one image draw
+  const stripBounds = useMemo(() => ({ x: -10, y: -lineH, width: colW + 20, height: lineH * 12 }), [colW, lineH]);
+  const stripTex = useBakedPicture(strip, stripBounds);
+  const stripImg = (
+    <Image image={stripTex} x={stripBounds.x} y={stripBounds.y} width={stripBounds.width} height={stripBounds.height} fit="fill" />
   );
   const span = Math.max(...adv) * 3;
   const clip = rect(g.right - span - 24, g.baseline - g.capH - 10, span + 40, g.capH + 32);
@@ -94,13 +101,13 @@ export const Counter = memo(function Counter({ layout, sv, font, smallFont }: Pr
   const wheels = (
     <>
       <Group transform={hundT}>
-        <Picture picture={strip} />
+        {stripImg}
       </Group>
       <Group transform={tensT}>
-        <Picture picture={strip} />
+        {stripImg}
       </Group>
       <Group transform={onesT}>
-        <Picture picture={strip} />
+        {stripImg}
       </Group>
     </>
   );

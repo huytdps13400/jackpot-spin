@@ -421,20 +421,24 @@ export const ArcReel = memo(function ArcReel({ layout, sv, atlas, texture, tone 
   const bezel = useMemo(() => sectorPath(Rn, band + 10, slotAngle / 2 + 2.5 / Rn, 0), [Rn, band, slotAngle]);
   const bezelInner = useMemo(() => sectorPath(Rn, band + 10, slotAngle / 2 + 2.5 / Rn, 4.2), [Rn, band, slotAngle]);
 
-  const wheel = (
+  // `soft`: the copy that is blurred as a whole for the side defocus. Its own depth blurs and
+  // drop shadows would vanish under that blur anyway, so it skips them (4 fewer blur layers a frame).
+  const wheelOf = (soft: boolean) => (
     <>
       <SpriteLayer texture={texture} frames={atlas.frames} data={platesSoft2} capacity={SLOTS} />
       <SpriteLayer texture={texture} frames={atlas.frames} data={platesSoft} capacity={SLOTS} />
       <SpriteLayer texture={texture} frames={atlas.frames} data={plates} capacity={SLOTS} />
       {/* crown moulding (under the bulbs) */}
-      <Path path={crownRim.path} style="stroke" strokeWidth={10} color="rgba(3,3,16,0.5)">
-        <BlurMask blur={5} style="normal" />
-      </Path>
+      {soft ? null : (
+        <Path path={crownRim.path} style="stroke" strokeWidth={10} color="rgba(3,3,16,0.5)">
+          <BlurMask blur={5} style="normal" />
+        </Path>
+      )}
       {[2, 1, 0].map((z) => (
         <Group
           key={`crown${z}`}
           layer={
-            z > 0 ? (
+            z > 0 && !soft ? (
               <Paint>
                 <Blur blur={z === 1 ? blurMid : blurFar} mode="decal" />
               </Paint>
@@ -453,14 +457,16 @@ export const ArcReel = memo(function ArcReel({ layout, sv, atlas, texture, tone 
         </Group>
       ))}
       <SpriteLayer texture={texture} frames={atlas.frames} data={bulbs} capacity={BULBS} blendMode="plus" />
-      <Path path={rim.path} style="stroke" strokeWidth={9} color="rgba(3,3,16,0.55)">
-        <BlurMask blur={5} style="normal" />
-      </Path>
+      {soft ? null : (
+        <Path path={rim.path} style="stroke" strokeWidth={9} color="rgba(3,3,16,0.55)">
+          <BlurMask blur={5} style="normal" />
+        </Path>
+      )}
       {[2, 1, 0].map((z) => (
         <Group
           key={`rim${z}`}
           layer={
-            z > 0 ? (
+            z > 0 && !soft ? (
               <Paint>
                 <Blur blur={z === 1 ? blurMid : blurFar} mode="decal" />
               </Paint>
@@ -475,6 +481,8 @@ export const ArcReel = memo(function ArcReel({ layout, sv, atlas, texture, tone 
       ))}
     </>
   );
+  const wheel = wheelOf(false);
+  const wheelSoft = wheelOf(true);
   const numbersLayer = (
     <>
       <SpriteLayer texture={texture} frames={atlas.frames} data={numbersSoft2} capacity={SLOTS * GHOSTS} />
@@ -502,20 +510,32 @@ export const ArcReel = memo(function ArcReel({ layout, sv, atlas, texture, tone 
     [0, 0.025, 0.07, 0.2, 0.3, 0.7, 0.8, 0.93, 0.975, 1],
   );
 
+  // Layers are as big as the clip they are saved under: keep them to the wheel's band (and the
+  // blurred copy to the two sides it shows on), so the edge blur costs a strip, not the screen.
+  const bandH = layout.reel.y + layout.reel.height + band;
+  const sideClip = useMemo(() => {
+    const b = Skia.PathBuilder.Make();
+    b.addRect(Skia.XYWHRect(0, 0, layout.width * 0.32, bandH));
+    b.addRect(Skia.XYWHRect(layout.width * 0.68, 0, layout.width * 0.32, bandH));
+    return b.build();
+  }, [layout.width, bandH]);
+  const bandClip = useMemo(() => Skia.XYWHRect(0, 0, layout.width, bandH), [layout.width, bandH]);
+
   return (
     <Group>
       <Group
+        clip={sideClip}
         layer={
           <Paint>
             <Blur blur={EDGE_BLUR} mode="decal" />
           </Paint>
         }
       >
-        {wheel}
+        {wheelSoft}
         {numbersLayer}
         {softMask}
       </Group>
-      <Group layer={<Paint />}>
+      <Group clip={bandClip} layer={<Paint />}>
         {wheel}
         {sharpMask}
       </Group>
@@ -549,7 +569,7 @@ export const ArcReel = memo(function ArcReel({ layout, sv, atlas, texture, tone 
           />
         </Path>
       </Group>
-      <Group layer={<Paint />}>
+      <Group clip={bandClip} layer={<Paint />}>
         {numbersLayer}
         {sharpMask}
       </Group>
