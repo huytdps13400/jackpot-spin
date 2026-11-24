@@ -11,9 +11,9 @@ Two skins share one layout; **tap the logo to switch** (the choice persists):
 
 A fanned prize wheel with gold crown and base mouldings crowns a gold-framed board of vault keys; below it sit a hexagon result plate, a message banner, an odometer counter plaque and a control bar with the SPIN jewel in the thumb zone.
 
-<p align="center"><img src="docs/demo.gif" width="300" alt="Two spins: the wheel blurs and brakes, the number is thrown onto its vault, the sapphire lid flips open and the treasure inside rises, then drops back into its gold setting. Then the QA fill, the last free cell: JACKPOT marquee, confetti and a fresh board."/></p>
+<p align="center"><img src="docs/demo.gif" width="300" alt="A spin: the wheel blurs and brakes, the house lights go down, the vault opens under a spotlight and the treasure rises. Then the QA fill, the last free cell: JACKPOT marquee, confetti and lights-out on the full board."/></p>
 
-Full demo (Release build, iPhone 17 Pro simulator): [`docs/demo.mp4`](docs/demo.mp4). It shows two tap spins, a flick spin, the QA fill below opening 99 vaults at once, the jackpot on the last cell and the new-board wave.
+Full demo **with sound** (Release build, iPhone 17 Pro simulator, 57 s, 60 fps, perf overlay on): [`docs/demo.mp4`](docs/demo.mp4). It shows two tap spins on a fresh board, the QA fill below opening 99 vaults at once, the jackpot on the last cell and the new-board wave. The green line under the logo is the in-app perf overlay (UI-thread fps, JS-thread fps, long frames, scene renders). The video was captured from the Simulator window together with the Mac's audio output, so it includes the reel ticks, the lock, the win stings and the music.
 
 ---
 
@@ -213,16 +213,19 @@ The seed lives in the persisted store and changes when a new board is dealt; the
 - **Shaders are warmed up.** The jackpot sign (gradients, blur masks, the ribbon clip, crown and star images) draws for the first 350 ms at opacity 0.004, so its first real frame is not its first compile.
 - **Textures are built once.** Atlases and chrome Pictures are keyed on the decoded images, the fonts and the layout. A bug where the decoded-image object changed identity on every Stage render made the jackpot and new-board renders re-rasterise all three atlases on the UI thread mid-celebration; memoising it removed the stall (visible in the perf overlay as long frames).
 - **Text is never measured on the UI thread.** Glyph runs are shaped once on JS; worklets read plain arrays.
-- **Bounded offscreen work.** There are no runtime blur layers on moving content; glows are additive sprites or radial gradients.
+- **Static art is baked, not replayed.** The board frame, the panel/control-bar chrome and the odometer digit strip are recorded once and rasterised into textures at device resolution (`stage/Baked.tsx`). A native profile (Instruments via Argent) showed the main thread re-rasterising their gold lettering, drawn as outlined paths, through Ganesh's CPU path renderer (`GrSWMaskHelper` / `aaa_fill_path`) on every frame; that was the largest single source of long frames.
+- **Bounded offscreen work.** Glows are additive sprites or radial gradients. The few offscreen layers that remain are clipped to what they cover: the wheel's side defocus is a strip at each edge (its blurred copy skips the wheel's own depth blurs and shadows), and the glyph shine's layer collapses to an empty clip when no pass is running, so idle frames allocate no offscreen layer at all. The lights-out dim and the stage lights are one full-screen shader pass, not two.
 - **Frame-rate independence.** `dt` is clamped to ≤ 40 ms, smoothing is exponential in `dt`, and timelines are in milliseconds. 120 Hz ProMotion and 60 Hz devices animate identically.
 - **No layout thrashing.** Layout is computed once from window size and safe area (`computeLayout`). Nothing re-measures during play.
 
-**Measured** (Release build of the Royal Treasure skin, iPhone 17 Pro simulator, fresh launch, perf overlay reset before the run). The run was a tap spin, a flick spin, the QA fill (99 vaults opening at once), the session's first jackpot and a new-board wave:
+**Measured** (Release build, iPhone 17 Pro simulator, perf overlay reset before each run):
 
-- UI thread: **60 fps** throughout. JS thread: 58–60 fps.
-- **0 long frames.** A frame counts as long when its interval is more than 1.6× the shortest interval seen.
-- **Scene renders: 0 per normal spin.** The Skia scene re-rendered only when the board filled up or was reset.
-- **First-jackpot hitch fixed.** Before a warm-up was added, the first jackpot of a session cost 4 long frames (later ones cost none): its sign's shaders and textures were compiled on first draw. The sign is now drawn once, mid-sequence and invisible, during the first 350 ms after launch.
+- UI thread: **60 fps**. JS thread: 58–62 fps.
+- **Idle: 0 long frames** over 15 s, with the stage lights, shimmer and glints running. A frame counts as long when its interval is more than 1.6× the shortest interval seen.
+- **One spin with a new treasure: 2 long frames**, down from 22 before this pass (12 after the layer fixes, 2 after baking the static art). Both coincide with the test tool reading the accessibility tree at the tap.
+- **Scene renders: 0 per normal spin.** The Skia scene re-renders only when the board fills up or resets.
+- **First-jackpot hitch fixed.** The jackpot sign is drawn once, invisible, during the first 350 ms after launch, so its first real frame is not its first shader compile.
+- In the demo video the overlay counts more long frames (about 27 over the take, most during the 99-vault QA fill and the jackpot). That take ran with the Simulator window being screen-captured and encoded live on the same Mac, which competes with the simulator for the CPU and GPU.
 
 A simulator is not a device, so treat these as a floor check rather than device numbers.
 
