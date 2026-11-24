@@ -18,6 +18,7 @@ import type { SpinEngine } from '../../engine/useSpinEngine';
 import { ResultKindCode } from '../../engine/timeline';
 import type { Rect as R, StageLayout } from '../../theme/layout';
 import { easeOutBack, progress } from './anim';
+import { GlyphShine, shineAt, waveAt } from './GlyphShine';
 import { RF, type ReelAtlas } from './textures';
 import { TF, type TextAtlas } from './textAtlas';
 
@@ -76,6 +77,7 @@ function putNumber(
   s: number,
   style: number,
   a: number,
+  fx?: DigitFx,
 ) {
   'worklet';
   const len = n > 0 ? lay[n * 4] : 0;
@@ -86,11 +88,36 @@ function putNumber(
       continue;
     }
     const digit = Math.floor(n / Math.pow(10, len - 1 - k)) % 10;
-    const dx = x + lay[n * 4 + 1 + k] * s;
-    put(d, o + k, dx, y, s, 0, TF.plate0 + style * 20 + digit, 1, 1, 1, a);
-    put(d, o + 3 + k, dx, y, s, 0, TF.plate0 + style * 20 + 10 + digit, 1, 1, 1, a);
+    // per digit: its own slam scale (staggered entrance) and the shine wave's lift
+    const sk = fx ? fx.scale(k) : s;
+    const dx = x + lay[n * 4 + 1 + k] * sk;
+    let dy = y;
+    let ds = sk;
+    let ak = a;
+    if (fx) {
+      ak *= fx.alpha(k);
+      const lift = waveAt(fx.u, (dx - fx.boxX) / fx.boxW);
+      dy -= lift * fx.liftPx;
+      ds *= 1 + 0.06 * lift;
+    }
+    put(d, o + k, dx, dy, ds, 0, TF.plate0 + style * 20 + digit, 1, 1, 1, ak);
+    put(d, o + 3 + k, dx, dy, ds, 0, TF.plate0 + style * 20 + 10 + digit, 1, 1, 1, ak);
   }
 }
+
+/** Per-digit motion for the incoming number: staggered slam-in and the shine-wave lift. */
+type DigitFx = {
+  scale: (k: number) => number;
+  alpha: (k: number) => number;
+  /** shine band position across the lettering box (NaN when none) */
+  u: number;
+  boxX: number;
+  boxW: number;
+  liftPx: number;
+};
+
+/** Delay between digits as the number slams in, left to right (ms). */
+const DIGIT_STAGGER = 55;
 
 /**
  * Result plate: the latest number slams in (scale 1.5 → 1 with overshoot) while the previous one
@@ -105,6 +132,11 @@ export const ResultPlate = memo(function ResultPlate({ layout, sv, atlas, textur
   const glow = useSpriteData(1);
   const nums = useSpriteData(DIGITS);
   const sBase = (plate.height * PLATE_CAP) / text.plateCapPx;
+  /** The lettering's box on the plate (the shine travels across it). */
+  const box = useMemo(
+    () => ({ x: plate.x + plate.width * 0.22, y: plate.y + plate.height * 0.2, width: plate.width * 0.56, height: plate.height * 0.6 }),
+    [plate],
+  );
   const lay = text.plateLayout;
 
   useFrameCallback(() => {
@@ -126,9 +158,26 @@ export const ResultPlate = memo(function ResultPlate({ layout, sv, atlas, textur
       'worklet';
       const tOut = progress(t, 0, 170);
       putNumber(d, 0, lay, old, cx, cy + 12 * tOut, sBase * (1 - 0.25 * tOut), 0, old > 0 ? 1 - tOut : 0);
-      const tIn = progress(t, 0, 340);
-      const s = sBase * (1.55 - 0.55 * easeOutBack(tIn)) * breathe;
-      putNumber(d, 6, lay, n, cx, cy, s, repeat ? 1 : 0, n > 0 ? progress(t, 0, 90) * intro : 0);
+      // staggered slam: each digit lands 55 ms after the one before it (all around the plate's
+      // optical centre cy), and the shine wave lifts each digit as its light passes
+      const reduce = sv.reduceMotion.value;
+      const shine = shineAt(sv, 0);
+      const fx: DigitFx = {
+        scale: (k: number) => {
+          'worklet';
+          const tk = progress(t - (reduce ? 0 : DIGIT_STAGGER * k), 0, 340);
+          return sBase * (1.55 - 0.55 * easeOutBack(tk)) * breathe;
+        },
+        alpha: (k: number) => {
+          'worklet';
+          return progress(t - (reduce ? 0 : DIGIT_STAGGER * k), 0, 90);
+        },
+        u: reduce ? NaN : shine.u,
+        boxX: box.x,
+        boxW: box.width,
+        liftPx: plate.height * PLATE_CAP * 0.09,
+      };
+      putNumber(d, 6, lay, n, cx, cy, sBase * breathe, repeat ? 1 : 0, n > 0 ? intro : 0, fx);
       return d;
     }, true);
   });
@@ -160,6 +209,10 @@ export const ResultPlate = memo(function ResultPlate({ layout, sv, atlas, textur
       </Group>
       <SpriteLayer texture={texture} frames={atlas.frames} data={glow} capacity={1} />
       <SpriteLayer texture={textTexture} frames={text.frames} data={nums} capacity={DIGITS} />
+      {/* light on the digits themselves (masked by the same sprites) */}
+      <GlyphShine sv={sv} piece={0} box={box}>
+        <SpriteLayer texture={textTexture} frames={text.frames} data={nums} capacity={DIGITS} />
+      </GlyphShine>
       <Group opacity={cometOpacity}>
         <Path path={hex} style="stroke" strokeWidth={4}>
           <SweepGradient c={vec(cx, cy)} colors={COMET} positions={COMET_POS} transform={comet} origin={vec(cx, cy)} />

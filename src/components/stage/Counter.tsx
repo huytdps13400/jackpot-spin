@@ -5,6 +5,7 @@ import { useDerivedValue } from 'react-native-reanimated';
 import type { SpinEngine } from '../../engine/useSpinEngine';
 import type { StageLayout } from '../../theme/layout';
 import { counterGeometry, drawGoldText } from './Chrome';
+import { GlyphShine } from './GlyphShine';
 
 type Props = { layout: StageLayout; sv: SpinEngine['sv']; font: SkFont; smallFont: SkFont };
 
@@ -90,6 +91,22 @@ export const Counter = memo(function Counter({ layout, sv, font, smallFont }: Pr
   });
   const glowOpacity = useDerivedValue(() => bump.value * 0.9);
 
+  const wheels = (
+    <>
+      <Group transform={hundT}>
+        <Picture picture={strip} />
+      </Group>
+      <Group transform={tensT}>
+        <Picture picture={strip} />
+      </Group>
+      <Group transform={onesT}>
+        <Picture picture={strip} />
+      </Group>
+    </>
+  );
+  // the band travels across the digits only (the static "/100" and label are in the chrome)
+  const shineBox = { x: g.right - span - 8, y: g.baseline - g.capH - 6, width: span + 16, height: g.capH + 12 };
+
   return (
     <Group>
       <Group blendMode="plus" opacity={glowOpacity}>
@@ -102,15 +119,11 @@ export const Counter = memo(function Counter({ layout, sv, font, smallFont }: Pr
         </Circle>
       </Group>
       <Group transform={punch} clip={clip}>
-        <Group transform={hundT}>
-          <Picture picture={strip} />
-        </Group>
-        <Group transform={tensT}>
-          <Picture picture={strip} />
-        </Group>
-        <Group transform={onesT}>
-          <Picture picture={strip} />
-        </Group>
+        {wheels}
+        {/* the light catches the digits themselves (the strips are the mask) */}
+        <GlyphShine sv={sv} piece={2} box={shineBox}>
+          {wheels}
+        </GlyphShine>
       </Group>
     </Group>
   );

@@ -1,4 +1,4 @@
-import { Group, LinearGradient, Rect, vec, type SkImage } from '@shopify/react-native-skia';
+import { Group, LinearGradient, Paint, Rect, vec, type SkImage } from '@shopify/react-native-skia';
 import { memo, useMemo } from 'react';
 import { makeMutable, useDerivedValue, useFrameCallback, type SharedValue } from 'react-native-reanimated';
 
@@ -8,6 +8,7 @@ import type { SpinEngine } from '../../engine/useSpinEngine';
 import { Phase, ResultKindCode, Reveal } from '../../engine/timeline';
 import type { StageLayout } from '../../theme/layout';
 import { easeOutCubic, progress } from './anim';
+import { GlyphShine } from './GlyphShine';
 import { TF, type TextAtlas } from './textAtlas';
 
 type Props = {
@@ -46,7 +47,8 @@ function pick(sv: SpinEngine['sv']) {
 /**
  * The info banner. Every message is a pre-lit sprite in the text atlas (see textAtlas.ts);
  * switching lines is a cross-slide (old one exits left, new one slides in from the right with a
- * small scale-up) plus a light streak across the glass — all on the UI thread, one Atlas draw,
+ * small scale-up) that writes itself on left → right behind a soft edge, then a shine band masked
+ * by the letters themselves (GlyphShine) — all on the UI thread, one Atlas draw,
  * no React render per message.
  */
 export const Banner = memo(function Banner({ layout, sv, atlas, texture }: Props) {
@@ -89,23 +91,39 @@ export const Banner = memo(function Banner({ layout, sv, atlas, texture }: Props
     }, true);
   });
 
-  const streakX = useDerivedValue(() => banner.x - 80 + (banner.width + 160) * progress(sv.clock.value - st.at.value, 40, 520));
-  const streakT = useDerivedValue(() => [{ translateX: streakX.value }, { skewX: -0.6 }]);
   const intro = useDerivedValue(() => progress(sv.clock.value, 850, 1150));
+  // the new line writes itself on left → right behind a soft edge (a staggered-letter reveal
+  // for a line that is one sprite), riding the slide-in
+  const EDGE = 56;
+  const wipeT = useDerivedValue(() => {
+    const p = sv.reduceMotion.value ? 1 : easeOutCubic(progress(sv.clock.value - st.at.value, 60, 460));
+    return [{ translateX: banner.x - EDGE + (banner.width + EDGE * 2) * p }];
+  });
+  const box = useMemo(
+    () => ({ x: banner.x + banner.width * 0.1, y: banner.y + banner.height * 0.2, width: banner.width * 0.8, height: banner.height * 0.6 }),
+    [banner],
+  );
 
   return (
     <Group opacity={intro}>
       <Group clip={{ x: banner.x + 8, y: banner.y + 2, width: banner.width - 16, height: banner.height - 4 }}>
-        <SpriteLayer texture={texture} frames={atlas.frames} data={lines} capacity={2} />
-        <Group transform={streakT} blendMode="plus">
-          <Rect x={0} y={banner.y} width={46} height={banner.height}>
-            <LinearGradient
-              start={vec(0, 0)}
-              end={vec(46, 0)}
-              colors={['rgba(255,226,160,0)', 'rgba(255,240,205,0.5)', 'rgba(255,226,160,0)']}
-            />
-          </Rect>
+        <Group layer={<Paint />}>
+          <SpriteLayer texture={texture} frames={atlas.frames} data={lines} capacity={2} />
+          <Group transform={wipeT}>
+            <Rect x={-banner.width * 2} y={banner.y} width={banner.width * 2 + EDGE} height={banner.height} blendMode="dstIn">
+              <LinearGradient
+                start={vec(banner.width * -2, 0)}
+                end={vec(EDGE, 0)}
+                colors={['#000', '#000', 'rgba(0,0,0,0)']}
+                positions={[0, (banner.width * 2) / (banner.width * 2 + EDGE), 1]}
+              />
+            </Rect>
+          </Group>
         </Group>
+        {/* the light catches the letters themselves (the line's own sprite is the mask) */}
+        <GlyphShine sv={sv} piece={1} box={box}>
+          <SpriteLayer texture={texture} frames={atlas.frames} data={lines} capacity={2} />
+        </GlyphShine>
       </Group>
     </Group>
   );

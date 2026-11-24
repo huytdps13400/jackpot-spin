@@ -5,9 +5,9 @@ import { useFrameCallback, type SharedValue } from 'react-native-reanimated';
 import { hideRange, put, useSpriteData } from '../../engine/sprites/layer';
 import { SpriteLayer } from '../../engine/sprites/SpriteLayer';
 import type { SpinEngine } from '../../engine/useSpinEngine';
-import { Reveal, ResultKindCode } from '../../engine/timeline';
 import type { Rect as LRect, StageLayout } from '../../theme/layout';
 import { hash, progress } from './anim';
+import { GLINT_LIFE, SHINE_SWEEP as SWEEP, shinePass } from './GlyphShine';
 import { GLINT_FRAMES, PF, type Atlas } from './textures';
 
 type Props = {
@@ -17,14 +17,8 @@ type Props = {
   texture: SharedValue<SkImage | null>;
 };
 
-/** Idle shimmer: one pass every PERIOD ms per piece of lettering, staggered plate → banner → counter. */
-const PERIOD = 5200;
-const STAGGER = 220;
-/** One pass of sparkle across the lettering, left to right. */
-const SWEEP = 820;
 /** Star glints that pop on the lettering behind the sweep: per piece, per pass. */
 const GLINTS = 4;
-const GLINT_LIFE = 520;
 const GLINT_PX = 128;
 
 /** Where the lettering visibly sits inside each painted piece (fractions of the rect). */
@@ -34,9 +28,8 @@ function textBox(r: LRect, fx: number, fy: number, fw: number, fh: number): LRec
 
 /**
  * Sparkle on the HUD lettering (result number, banner line, claimed counter): four-point star
- * glints pop across each piece left to right, like light catching polished metal. Glints only
- * (additive sprites, no sweeping band): a band over the art cannot be masked to the glyphs, which
- * live in other layers, and it read as a light box over the plate.
+ * glints pop across each piece left to right, just behind the glyph-masked shine each piece
+ * draws itself (GlyphShine), like light catching polished metal. Both run off `shinePass`.
  *
  * Rhythm (game UI: the eye should land on the text at the moments that matter, not be pulled at
  * all the time): an idle pass every 5.2 s, staggered across the three pieces; on a new cell an
@@ -52,23 +45,9 @@ export const TextShimmer = memo(function TextShimmer({ layout, sv, atlas, textur
     ],
     [layout],
   );
-  /** Reveal beat that fires each piece's extra pass. */
-  const beats = [Reveal.HitStopEnd, Reveal.ChipIn + 60, Reveal.CountStart];
-
-  /** Time into the current pass of piece i (ms), or -1 when it is not sweeping, and its strength. */
   const passOf = (i: number) => {
     'worklet';
-    if (sv.reduceMotion.value) return [-1, 0, 0];
-    const r = sv.reveal.value;
-    if (r >= 0 && sv.kind.value !== ResultKindCode.Repeat && sv.winIdx.value >= 0) {
-      const t = r - beats[i];
-      if (t >= 0 && t < SWEEP + GLINT_LIFE * 2) return [t, 1, Math.floor(r / 97) + i * 13];
-    }
-    // idle passes only while the wheel rests, and not during the intro (the HUD is still empty)
-    if (sv.clock.value < 2400 || sv.busy.value > 0.5 || sv.speed.value > 0.02 || (r >= 0 && r < Reveal.Steady)) return [-1, 0, 0];
-    const c = sv.clock.value + PERIOD - i * STAGGER;
-    const t = c % PERIOD;
-    return [t, 0.9, Math.floor(c / PERIOD) * 3 + i];
+    return shinePass(sv, i);
   };
 
   const glints = useSpriteData(boxes.length * GLINTS);
