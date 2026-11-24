@@ -78,7 +78,6 @@ type Props = {
 /**
  * Light on the letters, not on a box: the glyphs are drawn into a layer, a skewed gradient band
  * is kept only where they are (srcIn — Skia's MaskedView), and the layer is added on top (plus).
- * After Native Bloom's "Shimmer wave text" (Reacticx), which masks a gradient by its text.
  */
 export function GlyphShine({ sv, piece, box, children }: Props) {
   const w = box.height * 1.4;
